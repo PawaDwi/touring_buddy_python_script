@@ -3,6 +3,7 @@ import json
 import html
 import os
 import boto3
+from dotenv import load_dotenv
 
 csv.field_size_limit(2147483647)
 
@@ -20,6 +21,7 @@ def escape_xml(text):
 
 def csv_to_osm(node_file_key, way_file_key, relation_file_key, output_file_key):
     # Explicitly provide AWS credentials
+    load_dotenv()
     aws_access_key_id = os.environ.get('AWS_ACCESS_KEY_ID')
     print(aws_access_key_id ,'check')
     aws_secret_access_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
