@@ -42,7 +42,7 @@ def csv_to_osm(node_file_key, way_file_key, relation_file_key, output_file_key):
 
     # Process node CSV
     for line in csv.reader((line.decode('utf-8') for line in node_content)):
-        print(line,'node')
+        # print(line,'node')
         lat = float(line[1])
         lon = float(line[2])
         min_lat = min(min_lat, lat / 10**7)
@@ -64,7 +64,7 @@ def csv_to_osm(node_file_key, way_file_key, relation_file_key, output_file_key):
 
     # Process way CSV
     for line in csv.reader((line.decode('utf-8') for line in way_content)):
-        print(line,'way')
+        # print(line,'way')
         osm_content += '  <way id="{}" version="1" timestamp="2024-03-15T00:00:00Z">\n'.format(line[0])
         nodes = line[1].strip('"{}').split(',')
         for node in nodes:
