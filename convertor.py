@@ -1,3 +1,4 @@
+
 import csv
 import json
 import html
@@ -25,21 +26,14 @@ def csv_to_osm(node_file_key, way_file_key, relation_file_key, output_file_key):
     aws_access_key_id = os.environ.get('AWS_ACCESS_KEY_ID')
     print(aws_access_key_id ,'check')
     aws_secret_access_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
-
+  
     # Create S3 client with provided credentials
     s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
-   
+    
     # Read node file directly from S3
     node_response = s3.get_object(Bucket='touring-buddy', Key=node_file_key)
     node_content = node_response['Body'].iter_lines()
-
-    # Read way file directly from S3
-    way_response = s3.get_object(Bucket='touring-buddy', Key=way_file_key)
-    way_content = way_response['Body'].iter_lines()
-
-    # Read relation file directly from S3
-    relation_response = s3.get_object(Bucket='touring-buddy', Key=relation_file_key)
-    relation_content = relation_response['Body'].iter_lines()
+    next(node_content)  # Skip the header line
 
     min_lat = float('inf')
     min_lon = float('inf')
@@ -47,9 +41,8 @@ def csv_to_osm(node_file_key, way_file_key, relation_file_key, output_file_key):
     max_lon = float('-inf')
 
     # Process node CSV
-    node_reader = csv.reader((line.decode('utf-8') for line in node_content))
-    next(node_reader)  # Skip the header line
-    for line in node_reader:
+    for line in csv.reader((line.decode('utf-8') for line in node_content)):
+        print(line,'node')
         lat = float(line[1])
         lon = float(line[2])
         min_lat = min(min_lat, lat / 10**7)
@@ -62,25 +55,15 @@ def csv_to_osm(node_file_key, way_file_key, relation_file_key, output_file_key):
     osm_content += '<osm version="0.6" generator="osmium/1.16.0">\n'
     osm_content += '  <bounds minlat="{:}" minlon="{:}" maxlat="{:}" maxlon="{:}"/>\n'.format(min_lat, min_lon, max_lat, max_lon)
 
-    # Process node CSV
-    node_reader = csv.reader((line.decode('utf-8') for line in node_content))
-    next(node_reader)  # Skip the header line
-    for line in node_reader:
-        print(line,'node')
-        osm_content += '  <node id="{}" version="1" timestamp="2024-03-15T00:00:00Z" lat="{:.7f}" lon="{:.7f}">\n'.format(line[0], float(line[1]) / 10**7, float(line[2]) / 10**7)
-        try:
-            tags = json.loads(line[3].replace('""', '"'))
-            cleaned_tags = clean_tags(tags)
-            for k, v in cleaned_tags.items():
-                osm_content += '    <tag k="{}" v="{}"/>\n'.format(escape_xml(k), escape_xml(v))
-        except json.JSONDecodeError:
-            pass
-        osm_content += '  </node>\n'
-   
+    # Reset file pointer for way and relation files
+
+    # Read way file directly from S3 in chunks
+    way_response = s3.get_object(Bucket='touring-buddy', Key=way_file_key)
+    way_content = way_response['Body'].iter_lines()
+    next(way_content)  # Skip the header line
+
     # Process way CSV
-    way_reader = csv.reader((line.decode('utf-8') for line in way_content))
-    next(way_reader)  # Skip the header line
-    for line in way_reader:
+    for line in csv.reader((line.decode('utf-8') for line in way_content)):
         print(line,'way')
         osm_content += '  <way id="{}" version="1" timestamp="2024-03-15T00:00:00Z">\n'.format(line[0])
         nodes = line[1].strip('"{}').split(',')
@@ -95,10 +78,15 @@ def csv_to_osm(node_file_key, way_file_key, relation_file_key, output_file_key):
             pass
         osm_content += '  </way>\n'
 
+    # Reset file pointer for relation files
+
+    # Read relation file directly from S3 in chunks
+    relation_response = s3.get_object(Bucket='touring-buddy', Key=relation_file_key)
+    relation_content = relation_response['Body'].iter_lines()
+    next(relation_content)  # Skip the header line
+
     # Process relation CSV
-    rels_reader = csv.reader((line.decode('utf-8') for line in relation_content))
-    next(rels_reader)  # Skip the header line
-    for line in rels_reader:
+    for line in csv.reader((line.decode('utf-8') for line in relation_content)):
         print(line,'rels')
         osm_content += '  <relation id="{}" version="1" timestamp="2024-03-15T00:00:00Z">\n'.format(line[0])
         try:
@@ -130,4 +118,3 @@ def csv_to_osm(node_file_key, way_file_key, relation_file_key, output_file_key):
 
 # Example usage
 csv_to_osm('india-nodes.csv', 'india-ways.csv', 'india-rels.csv', 'india.osm')
-
