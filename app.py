@@ -5,8 +5,24 @@ import html
 import os
 import boto3
 from dotenv import load_dotenv
+import argparse
+from enums import FileName
+
 
 csv.field_size_limit(2147483647)
+
+
+min_lat = float('inf')
+min_lon = float('inf')
+max_lat = float('-inf')
+max_lon = float('-inf')
+
+
+osm_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
+osm_content += '<osm version="0.6" generator="osmium/1.16.0">\n'
+osm_content += '  <bounds minlat="{:}" minlon="{:}" maxlat="{:}" maxlon="{:}"/>\n'.format(min_lat, min_lon, max_lat, max_lon)
+
+
 
 def clean_tags(tags):
     cleaned_tags = {}
@@ -20,25 +36,14 @@ def clean_tags(tags):
 def escape_xml(text):
     return html.escape(text, quote=False)
 
-def csv_to_osm(node_file_key, way_file_key, relation_file_key, output_file_key):
-    # Explicitly provide AWS credentials
-    load_dotenv()
-    aws_access_key_id = os.environ.get('AWS_ACCESS_KEY_ID')
-    print(aws_access_key_id ,'check')
-    aws_secret_access_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
-  
-    # Create S3 client with provided credentials
+
+def process_nodes(sourceFileName,destinationFileName,aws_access_key_id,aws_secret_access_key):
     s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
-    
     # Read node file directly from S3
-    node_response = s3.get_object(Bucket='touring-buddy', Key=node_file_key)
+    node_response = s3.get_object(Bucket='touring-buddy', Key=sourceFileName)
     node_content = node_response['Body'].iter_lines()
     next(node_content)  # Skip the header line
-
-    min_lat = float('inf')
-    min_lon = float('inf')
-    max_lat = float('-inf')
-    max_lon = float('-inf')
+    
 
     # Process node CSV
     for line in csv.reader((line.decode('utf-8') for line in node_content)):
@@ -49,16 +54,19 @@ def csv_to_osm(node_file_key, way_file_key, relation_file_key, output_file_key):
         min_lon = min(min_lon, lon / 10**7)
         max_lat = max(max_lat, lat / 10**7)
         max_lon = max(max_lon, lon / 10**7)
+    
+    osm_content += '</osm>\n'
+    s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
 
-    # Create the output OSM XML content
-    osm_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
-    osm_content += '<osm version="0.6" generator="osmium/1.16.0">\n'
-    osm_content += '  <bounds minlat="{:}" minlon="{:}" maxlat="{:}" maxlon="{:}"/>\n'.format(min_lat, min_lon, max_lat, max_lon)
 
-    # Reset file pointer for way and relation files
 
+def process_way(sourceFileName,destinationFileName,aws_access_key_id,aws_secret_access_key):
+    
+    s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
+      # Create the output OSM XML content
+   
     # Read way file directly from S3 in chunks
-    way_response = s3.get_object(Bucket='touring-buddy', Key=way_file_key)
+    way_response = s3.get_object(Bucket='touring-buddy', Key=sourceFileName)
     way_content = way_response['Body'].iter_lines()
     next(way_content)  # Skip the header line
 
@@ -77,11 +85,14 @@ def csv_to_osm(node_file_key, way_file_key, relation_file_key, output_file_key):
         except json.JSONDecodeError:
             pass
         osm_content += '  </way>\n'
+        osm_content += '</osm>\n'
+    s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
 
-    # Reset file pointer for relation files
 
-    # Read relation file directly from S3 in chunks
-    relation_response = s3.get_object(Bucket='touring-buddy', Key=relation_file_key)
+
+def process_relation(sourceFileName,destinationFileName,aws_access_key_id,aws_secret_access_key):
+    s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
+    relation_response = s3.get_object(Bucket='touring-buddy', Key=sourceFileName)
     relation_content = relation_response['Body'].iter_lines()
     next(relation_content)  # Skip the header line
 
@@ -113,13 +124,27 @@ def csv_to_osm(node_file_key, way_file_key, relation_file_key, output_file_key):
 
     osm_content += '</osm>\n'
 
-    # Write the OSM content to S3 bucket
-    s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=output_file_key)
+    s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
+    
+    
+def main(sourceFileName, destinationFileName):
+    load_dotenv()
+    aws_access_key_id = os.environ.get('AWS_ACCESS_KEY_ID')
+    print(aws_access_key_id, 'check')
+    aws_secret_access_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
 
-# Example usage
-csv_to_osm('india-nodes.csv', 'india-ways.csv', 'india-rels.csv', 'india.osm')
+    if sourceFileName == FileName.NODE_FILE:
+        process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key)
+    elif sourceFileName == FileName.RELATION_FILE:
+        process_relation(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key)
+    else:
+        process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key)
 
-# Make Different Function for Different File Processing 
-# Create a Execution Function which contains the common file processing Script 
-# In the Execution Function Write a Conditions for File Processing 
-# Create a Docker Envi for Execution Function with Prameterize environment 
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Script description")
+    parser.add_argument("--source", dest="source_file_name", required=True, help="Source file name")
+    parser.add_argument("--destination", dest="destination_file_name", required=True, help="Destination file name")
+    args = parser.parse_args()
+
+    main(sourceFileName=args.source_file_name,destinationFileName= args.destination_file_name)

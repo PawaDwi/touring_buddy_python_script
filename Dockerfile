@@ -1,9 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3.8-slim
-
-# Set environment variables
-ENV PARAMETER_1=default_value \
-    PARAMETER_2=default_value
+FROM python:3.9-slim
 
 # Set the working directory in the container
 WORKDIR /app
@@ -11,8 +7,12 @@ WORKDIR /app
 # Copy the current directory contents into the container at /app
 COPY . /app
 
-# Install any needed packages specified in requirements.txt
+# Install any needed dependencies specified in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Run the Python script with parameters passed as arguments
-CMD ["python", "script.py", "--param1=$PARAMETER_1", "--param2=$PARAMETER_2"]
+# Define default values for parameters
+ENV SOURCE_FILE_NAME="india-nodes.csv"
+ENV DESTINATION_FILE_NAME="india-nodes.osm"
+
+# Run the Python script with parameters when the container launches
+CMD ["python", "app.py", "--source", "${SOURCE_FILE_NAME}", "--destination", "${DESTINATION_FILE_NAME}"]
