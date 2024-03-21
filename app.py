@@ -12,18 +12,6 @@ from enums import FileName
 csv.field_size_limit(2147483647)
 
 
-min_lat = float('inf')
-min_lon = float('inf')
-max_lat = float('-inf')
-max_lon = float('-inf')
-
-
-osm_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
-osm_content += '<osm version="0.6" generator="osmium/1.16.0">\n'
-osm_content += '  <bounds minlat="{:}" minlon="{:}" maxlat="{:}" maxlon="{:}"/>\n'.format(min_lat, min_lon, max_lat, max_lon)
-
-
-
 def clean_tags(tags):
     cleaned_tags = {}
     for k, v in tags.items():
@@ -44,6 +32,15 @@ def process_nodes(sourceFileName,destinationFileName,aws_access_key_id,aws_secre
     node_content = node_response['Body'].iter_lines()
     next(node_content)  # Skip the header line
     
+    min_lat = float('inf')
+    min_lon = float('inf')
+    max_lat = float('-inf')
+    max_lon = float('-inf')
+
+
+    osm_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    osm_content += '<osm version="0.6" generator="osmium/1.16.0">\n'
+    osm_content += '  <bounds minlat="{:}" minlon="{:}" maxlat="{:}" maxlon="{:}"/>\n'.format(min_lat, min_lon, max_lat, max_lon)
 
     # Process node CSV
     for line in csv.reader((line.decode('utf-8') for line in node_content)):
@@ -69,6 +66,16 @@ def process_way(sourceFileName,destinationFileName,aws_access_key_id,aws_secret_
     way_response = s3.get_object(Bucket='touring-buddy', Key=sourceFileName)
     way_content = way_response['Body'].iter_lines()
     next(way_content)  # Skip the header line
+    
+    min_lat = float('inf')
+    min_lon = float('inf')
+    max_lat = float('-inf')
+    max_lon = float('-inf')
+    
+    
+    osm_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    osm_content += '<osm version="0.6" generator="osmium/1.16.0">\n'
+    osm_content += '  <bounds minlat="{:}" minlon="{:}" maxlat="{:}" maxlon="{:}"/>\n'.format(min_lat, min_lon, max_lat, max_lon)
 
     # Process way CSV
     for line in csv.reader((line.decode('utf-8') for line in way_content)):
@@ -95,6 +102,16 @@ def process_relation(sourceFileName,destinationFileName,aws_access_key_id,aws_se
     relation_response = s3.get_object(Bucket='touring-buddy', Key=sourceFileName)
     relation_content = relation_response['Body'].iter_lines()
     next(relation_content)  # Skip the header line
+    
+    min_lat = float('inf')
+    min_lon = float('inf')
+    max_lat = float('-inf')
+    max_lon = float('-inf')
+    
+    
+    osm_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    osm_content += '<osm version="0.6" generator="osmium/1.16.0">\n'
+    osm_content += '  <bounds minlat="{:}" minlon="{:}" maxlat="{:}" maxlon="{:}"/>\n'.format(min_lat, min_lon, max_lat, max_lon)
 
     # Process relation CSV
     for line in csv.reader((line.decode('utf-8') for line in relation_content)):
@@ -132,7 +149,7 @@ def main(sourceFileName, destinationFileName):
     aws_access_key_id = os.environ.get('AWS_ACCESS_KEY_ID')
     print(aws_access_key_id, 'check')
     aws_secret_access_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
-
+    
     if sourceFileName == FileName.NODE_FILE:
         process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key)
     elif sourceFileName == FileName.RELATION_FILE:
@@ -146,5 +163,5 @@ if __name__ == "__main__":
     parser.add_argument("--source", dest="source_file_name", required=True, help="Source file name")
     parser.add_argument("--destination", dest="destination_file_name", required=True, help="Destination file name")
     args = parser.parse_args()
-
+    print(args.source_file_name,args.destination_file_name)
     main(sourceFileName=args.source_file_name,destinationFileName= args.destination_file_name)
