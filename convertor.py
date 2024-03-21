@@ -116,5 +116,23 @@ def csv_to_osm(node_file_key, way_file_key, relation_file_key, output_file_key):
     # Write the OSM content to S3 bucket
     s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=output_file_key)
 
+
+def process_node_file:
+
+    # Process node CSV
+    for line in csv.reader((line.decode('utf-8') for line in node_content)):
+        print(line,'node')
+        lat = float(line[1])
+        lon = float(line[2])
+        min_lat = min(min_lat, lat / 10**7)
+        min_lon = min(min_lon, lon / 10**7)
+        max_lat = max(max_lat, lat / 10**7)
+        max_lon = max(max_lon, lon / 10**7)
+
+
+
+
 # Example usage
 csv_to_osm('india-nodes.csv', 'india-ways.csv', 'india-rels.csv', 'india.osm')
+
+
