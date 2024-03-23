@@ -106,6 +106,7 @@ def process_relation(sourceFileName, destinationFileName, aws_access_key_id, aws
 
     # Process relation CSV
     for line in csv.reader((line.decode('utf-8') for line in relation_content)):
+        print('processing Relations:',line)
         osm_content += '  <relation id="{}" version="1" timestamp="2024-03-15T00:00:00Z">\n'.format(line[0])
         try:
             members = json.loads(line[1].replace('""', '"'))
@@ -137,16 +138,15 @@ def main(sourceFileName, destinationFileName):
     aws_access_key_id = os.environ.get('AWS_ACCESS_KEY_ID')
     print(aws_access_key_id, 'check')
     aws_secret_access_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
-
-    # Initialize AWS S3 client
-    s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
+    
+    print(aws_access_key_id,aws_secret_access_key)
     
     # Determine the type of file based on the file name
-    if  sourceFileName == 'north-node.csv':
+    if  sourceFileName == 'india-nodes.csv':
         process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key)
-    elif sourceFileName == 'north-ways.csv':
+    elif sourceFileName == 'india-ways.csv':
         process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key)
-    elif sourceFileName == 'north-rels.csv':
+    elif sourceFileName == 'india-rels.csv':
         process_relation(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key)
     else:
         print("Invalid source file type.")
