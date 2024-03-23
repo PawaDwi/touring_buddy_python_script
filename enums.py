@@ -1,7 +1,7 @@
 from enum import Enum
 
 class FileName(Enum):
-    NODE_FILE = 'india-nodes.csv'
-    RELATION_FILE = 'india-rels.csv'
-    WAY_FILE = 'india-ways.csv'
+    NODE_FILE = 'north-node.csv'
+    RELATION_FILE = '-rels.csv'
+    WAY_FILE = 'north-ways.csv'
     
