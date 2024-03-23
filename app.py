@@ -5,7 +5,6 @@ import os
 import boto3
 import argparse
 from dotenv import load_dotenv
-from enums import FileName
 
 csv.field_size_limit(2147483647)
 
@@ -143,7 +142,7 @@ def main(sourceFileName, destinationFileName):
     s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
     
     # Determine the type of file based on the file name
-    if sourceFileName == 'north-node.csv':
+    if  sourceFileName == 'north-node.csv':
         process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key)
     elif sourceFileName == 'north-ways.csv':
         process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key)
