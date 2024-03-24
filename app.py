@@ -1,11 +1,16 @@
 import csv
 import json
+from tqdm import tqdm 
 import html
 import os
 import boto3
 import argparse
 import logging
 from dotenv import load_dotenv
+
+if 'PYCHARM_HOSTED' not in os.environ:
+    from tqdm import tqdm
+
 
 # Configure logging
 logging.basicConfig(filename='error.log', level=logging.ERROR)
@@ -27,6 +32,12 @@ def clean_tags(tags):
 def escape_xml(text):
     return html.escape(text, quote=False)
 
+import logging
+import csv
+import json
+import boto3
+from tqdm import tqdm
+
 def process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key):
     try:
         s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
@@ -43,8 +54,11 @@ def process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_se
         max_lat = float('-inf')
         max_lon = float('-inf')
 
-        for line in csv.reader((line.decode('utf-8') for line in node_content)):
-            print('processing node:', line)
+        node_lines = list(node_content)  # Convert generator to list to get total line count
+
+        total_iterations = len(node_lines)  # Get total line count
+
+        for line in tqdm(csv.reader((line.decode('utf-8') for line in node_lines)), total=total_iterations, desc="Processing nodes", disable='PYCHARM_HOSTED' in os.environ):
             node_id = line[0]
             lat = float(line[1]) / 10**7
             lon = float(line[2]) / 10**7
@@ -56,12 +70,15 @@ def process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_se
             max_lon = max(max_lon, lon)
             
             try:
-                tags = json.loads(line[3].replace('""', '"'))
-                cleaned_tags = clean_tags(tags)
-                osm_content += '  <node id="{}" version="1" timestamp="2024-03-15T00:00:00Z" lat="{:.7f}" lon="{:.7f}">\n'.format(node_id, lat, lon)
-                for k, v in cleaned_tags.items():
-                    osm_content += '    <tag k="{}" v="{}"/>\n'.format(escape_xml(k), escape_xml(v))
-                osm_content += '  </node>\n'
+                if line[3]:
+                    tags = json.loads(line[3].replace('""', '"'))
+                    cleaned_tags = clean_tags(tags)
+                    osm_content += '  <node id="{}" version="1" timestamp="2024-03-15T00:00:00Z" lat="{:.7f}" lon="{:.7f}">\n'.format(node_id, lat, lon)
+                    for k, v in cleaned_tags.items():
+                        osm_content += '    <tag k="{}" v="{}"/>\n'.format(escape_xml(k), escape_xml(v))
+                    osm_content += '  </node>\n'
+                else:
+                    osm_content += '  <node id="{}" version="1" timestamp="2024-03-15T00:00:00Z" lat="{:.7f}" lon="{:.7f}"/>\n'.format(node_id, lat, lon)
             except Exception as e:
                 logging.error(f"Error processing node: {e}")
                 continue
@@ -75,6 +92,7 @@ def process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_se
     except Exception as e:
         logging.error(f"Error processing nodes: {e}")
 
+
 def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key):
     try:
         s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
@@ -85,9 +103,12 @@ def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secr
         osm_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
         osm_content += '<osm version="0.6" generator="osmium/1.16.0">\n'
 
+        # Store lines in a list
+        way_lines = list(way_content)
+
         # Process way CSV
-        for line in csv.reader((line.decode('utf-8') for line in way_content)):
-            print('processing ways:',line)
+        total_iterations = len(way_lines)
+        for line in tqdm(csv.reader((line.decode('utf-8') for line in way_lines)), total=total_iterations, desc="Processing ways", disable='PYCHARM_HOSTED' in os.environ):
             osm_content += '  <way id="{}" version="1" timestamp="2024-03-15T00:00:00Z">\n'.format(line[0])
             nodes = line[1].strip('"{}').split(',')
             for node in nodes:
@@ -117,11 +138,16 @@ def process_relation(sourceFileName, destinationFileName, aws_access_key_id, aws
         osm_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
         osm_content += '<osm version="0.6" generator="osmium/1.16.0">\n'
 
+        # Store lines in a list
+        relation_lines = list(relation_content)
+
         # Process relation CSV
-        for line in csv.reader((line.decode('utf-8') for line in relation_content)):
+        total_iterations = len(relation_lines)
+        print(total_iterations)
+        for line in tqdm(csv.reader((line.decode('utf-8') for line in relation_lines)), total=total_iterations, desc="Processing nodes", disable='PYCHARM_HOSTED' in os.environ):
             osm_content += '  <relation id="{}" version="1" timestamp="2024-03-15T00:00:00Z">\n'.format(line[0])
             try:
-                members = json.loads(line[1].replace('""', '"'))
+                members = json.loads(line[1])
                 for member in members:
                     member_type = member["type"].lower()
                     if member_type == 'w':
@@ -136,7 +162,7 @@ def process_relation(sourceFileName, destinationFileName, aws_access_key_id, aws
                 pass
             
             try:
-                tags = json.loads(line[2].replace('""', '"'))
+                tags = json.loads(line[2])
                 cleaned_tags = clean_tags(tags)
                 for k, v in cleaned_tags.items():
                     osm_content += '    <tag k="{}" v="{}"/>\n'.format(escape_xml(k), escape_xml(v))
@@ -157,11 +183,11 @@ def main(sourceFileName, destinationFileName):
     aws_secret_access_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
     
     # Determine the type of file based on the file name
-    if sourceFileName == 'india-nodes.csv':
+    if sourceFileName == 'north-node.csv':
         process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key)
-    elif sourceFileName == 'india-ways.csv':
+    elif sourceFileName == 'north-ways.csv':
         process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key)
-    elif sourceFileName == 'india-rels.csv':
+    elif sourceFileName == 'north-rels.csv':
         process_relation(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key)
     else:
         logging.error("Invalid source file type.")
