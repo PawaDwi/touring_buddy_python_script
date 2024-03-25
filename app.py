@@ -1,5 +1,6 @@
 import csv
 import json
+import re
 from tqdm import tqdm 
 import html
 import os
@@ -40,38 +41,50 @@ from tqdm import tqdm
 
 def process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key):
     try:
+        # Initialize logging
+        logging.basicConfig(filename='error.log', level=logging.ERROR)
+
+        # Initialize S3 client
         s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
+
+        # Retrieve node data from S3
         node_response = s3.get_object(Bucket='touring-buddy', Key=sourceFileName)
         node_content = node_response['Body'].iter_lines()
         next(node_content)  # Skip the header line
 
+        # Initialize XML content
         osm_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
         osm_content += '<osm version="0.6" generator="osmium/1.16.0">\n'
 
-        # Process node CSV
+        # Initialize bounds
         min_lat = float('inf')
         min_lon = float('inf')
         max_lat = float('-inf')
         max_lon = float('-inf')
 
-        node_lines = list(node_content)  # Convert generator to list to get total line count
+        # Convert generator to list to get total line count
+        node_lines = list(node_content)
+        total_iterations = len(node_lines)
 
-        total_iterations = len(node_lines)  # Get total line count
-
-        for line in tqdm(csv.reader((line.decode('utf-8') for line in node_lines)), total=total_iterations, desc="Processing nodes", disable='PYCHARM_HOSTED' in os.environ):
-            node_id = line[0]
-            lat = float(line[1]) / 10**7
-            lon = float(line[2]) / 10**7
-            
-            # Update bounds
-            min_lat = min(min_lat, lat)
-            min_lon = min(min_lon, lon)
-            max_lat = max(max_lat, lat)
-            max_lon = max(max_lon, lon)
-            
+        # Process each line in the CSV
+        for line_num, line in tqdm(enumerate(csv.reader((line.decode('utf-8') for line in node_lines))), total=total_iterations, desc="Processing nodes", disable='PYCHARM_HOSTED' in os.environ):
             try:
-                if line[3]:
-                    tags = json.loads(line[3].replace('""', '"'))
+                # Extract node information
+                node_id = line[0]
+                lat = float(line[1]) / 10**7
+                lon = float(line[2]) / 10**7
+                
+                # Update bounds
+                min_lat = min(min_lat, lat)
+                min_lon = min(min_lon, lon)
+                max_lat = max(max_lat, lat)
+                max_lon = max(max_lon, lon)
+                
+                # Process tags if available
+                if len(line) > 3 and line[3]:
+                    tags_str = re.sub(r'(?<!\\)""', '"', line[3].replace('""', '\\"'))# Replace double double-quotes with single double-quotes using replace
+                    tags_str = re.sub(r'(?<!\\)""', '"', tags_str)  # Further replace any remaining double double-quotes
+                    tags = json.loads(tags_str)  # Load the JSON string into a dictionary
                     cleaned_tags = clean_tags(tags)
                     osm_content += '  <node id="{}" version="1" timestamp="2024-03-15T00:00:00Z" lat="{:.7f}" lon="{:.7f}">\n'.format(node_id, lat, lon)
                     for k, v in cleaned_tags.items():
@@ -80,8 +93,8 @@ def process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_se
                 else:
                     osm_content += '  <node id="{}" version="1" timestamp="2024-03-15T00:00:00Z" lat="{:.7f}" lon="{:.7f}"/>\n'.format(node_id, lat, lon)
             except Exception as e:
-                logging.error(f"Error processing node: {e}")
-                continue
+                # Log error with line number
+                logging.error(f"Error processing node at line {line_num + 1}: {e}")
 
         # Add bounds to the XML content
         osm_content += '<bounds minlat="{:.7f}" minlon="{:.7f}" maxlat="{:.7f}" maxlon="{:.7f}"/>\n'.format(min_lat, min_lon, max_lat, max_lon)
@@ -90,8 +103,8 @@ def process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_se
         # Put the object to S3
         s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
     except Exception as e:
-        logging.error(f"Error processing nodes: {e}")
-
+        # Log any exception occurred during the process
+        logging.error(f"Error processing nodes data: {e}")
 
 def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key):
     try:
