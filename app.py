@@ -106,7 +106,7 @@ def process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_se
         print(f"TOTAL RECORDS :- {total_iterations}")
         print(f"INITIATING UPLOAD OSM FILE TO S3 {destinationFileName}")
         try:
-            upload_large_content_to_s3(bucket_name="touring-buddy",content=osm_content,object_name=destinationFileName)
+            s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
         except:
             print(f"ERROR UPLOADING")
         print(f"DONE UPLOADEING {destinationFileName} TO S3")
@@ -157,7 +157,7 @@ def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secr
         print(f"TOTAL RECORDS :- {total_iterations}")
         print(f"INITIATING UPLOAD OSM FILE TO S3 {destinationFileName}")
         try:
-           upload_large_content_to_s3(bucket_name="touring-buddy",content=osm_content,object_name=destinationFileName)
+            s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
         except:
             print(f"ERROR UPLOADING")
         print(f"DONE UPLOADEING {destinationFileName} TO S3")
@@ -216,8 +216,7 @@ def process_relation(sourceFileName, destinationFileName, aws_access_key_id, aws
         print(f"TOTAL RECORDS :- {total_iterations}")
         print(f"INITIATING UPLOAD OSM FILE TO S3 {destinationFileName}")
         try:
-            upload_large_content_to_s3(bucket_name="touring-buddy",content=osm_content,object_name=destinationFileName)
-            # s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
+            s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
         except:
             print(f"ERROR UPLOADING")
         print(f"DONE UPLOADEING {destinationFileName} TO S3")
@@ -226,71 +225,6 @@ def process_relation(sourceFileName, destinationFileName, aws_access_key_id, aws
         logging.error(f"Error processing relations: {e}")
 
 
-
-def upload_large_content_to_s3(content, bucket_name, object_name):
-    """
-    Uploads large content to Amazon S3.
-
-    :param content: Content to upload.
-    :param bucket_name: Name of the S3 bucket.
-    :param object_name: S3 object name.
-    :return: True if content was uploaded successfully, else False.
-    """
-    load_dotenv()
-    aws_access_key_id = os.environ.get('AWS_ACCESS_KEY_ID')
-    aws_secret_access_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
-    
-    # Initialize a session using AWS credentials
-    session = boto3.Session(
-        aws_access_key_id=aws_access_key_id,
-        aws_secret_access_key=aws_secret_access_key
-    )
-    
-    # Create S3 client
-    s3_client = session.client('s3')
-
-    # Convert content to bytes
-    content_bytes = content.encode('utf-8')
-    content_stream = BytesIO(content_bytes)
-
-    # Perform multipart upload to handle large content
-    multipart_upload = s3_client.create_multipart_upload(
-        Bucket=bucket_name,
-        Key=object_name
-    )
-
-    # Start uploading parts
-    part_number = 1
-    parts = []
-
-    while True:
-        # Read part_size bytes from the content
-        part_data = content_stream.read(5 * 1024 * 1024)  # 5 MB chunk size
-        if not part_data:
-            break
-
-        # Upload the part
-        response = s3_client.upload_part(
-            Bucket=bucket_name,
-            Key=object_name,
-            PartNumber=part_number,
-            UploadId=multipart_upload['UploadId'],
-            Body=part_data
-        )
-
-        # Append part number and ETag for later completion
-        parts.append({'PartNumber': part_number, 'ETag': response['ETag']})
-        part_number += 1
-
-    # Complete the multipart upload
-    s3_client.complete_multipart_upload(
-        Bucket=bucket_name,
-        Key=object_name,
-        UploadId=multipart_upload['UploadId'],
-        MultipartUpload={'Parts': parts}
-    )
-
-    return True
 
 def main(sourceFileName, destinationFileName):
     load_dotenv()
