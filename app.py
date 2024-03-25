@@ -46,6 +46,7 @@ def process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_se
 
         # Initialize S3 client
         s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
+        print(f"S3 INITIALIAZE {s3}")
 
         # Retrieve node data from S3
         node_response = s3.get_object(Bucket='touring-buddy', Key=sourceFileName)
@@ -100,16 +101,20 @@ def process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_se
         # Add bounds to the XML content
         osm_content += '<bounds minlat="{:.7f}" minlon="{:.7f}" maxlat="{:.7f}" maxlon="{:.7f}"/>\n'.format(min_lat, min_lon, max_lat, max_lon)
         osm_content += '</osm>\n'
-        
-        # Put the object to S3
+        print(f"____________________PROCESSING_COMPLETED_______________________________")
+        print(f"TOTAL RECORDS :- {node_lines}")
+        print(f"INITIATING UPLOAD OSM FILE TO S3 {destinationFileName}")
         s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
+        print(f"DONE UPLOADEING {destinationFileName} TO S3")
+        print(f"OSM CONTENT {osm_content.encode('utf-8')}")
     except Exception as e:
         # Log any exception occurred during the process
-        logging.error(f"Error processing nodes data: {e}")
+        print(f"Error processing nodes data: {e}")
 
 def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key):
     try:
         s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
+        print(f"S3 INITIALIAZE {s3}")
         way_response = s3.get_object(Bucket='touring-buddy', Key=sourceFileName)
         way_content = way_response['Body'].iter_lines()
         next(way_content)  # Skip the header line
@@ -140,18 +145,24 @@ def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secr
                 continue
             except Exception as e:
                 # Log other exceptions and continue to the next line
-                logging.error(f"Error processing way at line {line_num + 1}: {e}")
+                print(f"Error processing way at line {line_num + 1}: {e}")
                 continue
             osm_content += '  </way>\n'
         osm_content += '</osm>\n'
+        print(f"____________________PROCESSING_COMPLETED_______________________________")
+        print(f"TOTAL RECORDS :- {way_lines}")
+        print(f"INITIATING UPLOAD OSM FILE TO S3 {destinationFileName}")
         s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
+        print(f"DONE UPLOADEING {destinationFileName} TO S3")
+        print(f"OSM CONTENT {osm_content.encode('utf-8')}")
     except Exception as e:
-        logging.error(f"Error processing ways: {e}")
+        print(f"Error processing ways: {e}")
 
 
 def process_relation(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key):
     try:
         s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
+        print(f"S3 INITIALIAZE {s3}")
         relation_response = s3.get_object(Bucket='touring-buddy', Key=sourceFileName)
         relation_content = relation_response['Body'].iter_lines()
         next(relation_content)  # Skip the header line
@@ -188,13 +199,18 @@ def process_relation(sourceFileName, destinationFileName, aws_access_key_id, aws
                 for k, v in cleaned_tags.items():
                     osm_content += '    <tag k="{}" v="{}"/>\n'.format(escape_xml(k), escape_xml(v))
             except Exception as e:
-                logging.error(f"Error processing relation tags: {e}")
+                print(f"Error processing relation tags: {e}")
                 pass
             
             osm_content += '  </relation>\n'
 
         osm_content += '</osm>\n'
+        print(f"____________________PROCESSING_COMPLETED_______________________________")
+        print(f"TOTAL RECORDS :- {relation_lines}")
+        print(f"INITIATING UPLOAD OSM FILE TO S3 {destinationFileName}")
         s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
+        print(f"DONE UPLOADEING {destinationFileName} TO S3")
+        print(f"OSM CONTENT {osm_content.encode('utf-8')}")
     except Exception as e:
         logging.error(f"Error processing relations: {e}")
 
@@ -202,13 +218,16 @@ def main(sourceFileName, destinationFileName):
     load_dotenv()
     aws_access_key_id = os.environ.get('AWS_ACCESS_KEY_ID')
     aws_secret_access_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
-    
+    print(f"LOADED ENV SUCCESSFULLY")
     # Determine the type of file based on the file name
     if sourceFileName == 'india-node.csv':
+        print(f"EXECUTING process_nodes FUNCTION ")
         process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key)
     elif sourceFileName == 'india-ways.csv':
+        print(f"EXECUTING process_way FUNCTION ")
         process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key)
     elif sourceFileName == 'india-rels.csv':
+        print(f"EXECUTING process_relation FUNCTION ")
         process_relation(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key)
     else:
         logging.error("Invalid source file type.")
@@ -218,4 +237,5 @@ if __name__ == "__main__":
     parser.add_argument("--source", dest="source_file_name", required=True, help="Source file name")
     parser.add_argument("--destination", dest="destination_file_name", required=True, help="Destination file name")
     args = parser.parse_args()
+    print("STARTING FILE PROCESSING")
     main(sourceFileName=args.source_file_name, destinationFileName=args.destination_file_name)
