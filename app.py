@@ -211,7 +211,7 @@ def process_relation(sourceFileName, destinationFileName, aws_access_key_id, aws
             next(source_file)
 
             # Process each line in the source file
-            for line_num, line in tqdm(enumerate(csv.reader((line.decode('utf-8') for line in source_file))), total=total_iterations, desc="Processing relation"):
+            for line_num, line in tqdm(enumerate(csv.reader((line.decode('utf-8') for line in source_file))), desc="Processing relation"):
                 print('processing relations:', line_num)
                 osm_content += '  <relation id="{}" version="1" timestamp="2024-03-15T00:00:00Z">\n'.format(line[0])
 
