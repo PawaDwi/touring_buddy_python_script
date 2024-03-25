@@ -68,6 +68,7 @@ def process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_se
 
         # Process each line in the CSV
         for line_num, line in tqdm(enumerate(csv.reader((line.decode('utf-8') for line in node_lines))), total=total_iterations, desc="Processing nodes", disable='PYCHARM_HOSTED' in os.environ):
+            print('processing nodes:',line_num)
             try:
                 # Extract node information
                 node_id = line[0]
@@ -121,19 +122,26 @@ def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secr
 
         # Process way CSV
         total_iterations = len(way_lines)
-        for line in tqdm(csv.reader((line.decode('utf-8') for line in way_lines)), total=total_iterations, desc="Processing ways", disable='PYCHARM_HOSTED' in os.environ):
+        for line_num, line in tqdm(enumerate(csv.reader((line.decode('utf-8') for line in way_lines))), total=total_iterations, desc="Processing ways", disable='PYCHARM_HOSTED' in os.environ):
+            print('processing ways:',line_num)
             osm_content += '  <way id="{}" version="1" timestamp="2024-03-15T00:00:00Z">\n'.format(line[0])
             nodes = line[1].strip('"{}').split(',')
             for node in nodes:
                 osm_content += '    <nd ref="{}"/>\n'.format(node.strip())
             try:
-                tags = json.loads(line[2].replace('""', '"'))
-                cleaned_tags = clean_tags(tags)
-                for k, v in cleaned_tags.items():
-                    osm_content += '    <tag k="{}" v="{}"/>\n'.format(escape_xml(k), escape_xml(v))
+                # Check if the third column contains valid JSON
+                if line[2]:
+                    tags = json.loads(line[2].replace('""', '"'))
+                    cleaned_tags = clean_tags(tags)
+                    for k, v in cleaned_tags.items():
+                        osm_content += '    <tag k="{}" v="{}"/>\n'.format(escape_xml(k), escape_xml(v))
+            except json.JSONDecodeError as e:
+                # Log error with line number and continue to the next line
+                continue
             except Exception as e:
-                logging.error(f"Error processing way: {e}")
-                pass
+                # Log other exceptions and continue to the next line
+                logging.error(f"Error processing way at line {line_num + 1}: {e}")
+                continue
             osm_content += '  </way>\n'
         osm_content += '</osm>\n'
         s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
@@ -156,8 +164,8 @@ def process_relation(sourceFileName, destinationFileName, aws_access_key_id, aws
 
         # Process relation CSV
         total_iterations = len(relation_lines)
-        print(total_iterations)
-        for line in tqdm(csv.reader((line.decode('utf-8') for line in relation_lines)), total=total_iterations, desc="Processing nodes", disable='PYCHARM_HOSTED' in os.environ):
+        for line_num, line in tqdm(enumerate(csv.reader((line.decode('utf-8') for line in relation_lines))), total=total_iterations, desc="Processing relation", disable='PYCHARM_HOSTED' in os.environ):
+            print('processing relations:',line_num)
             osm_content += '  <relation id="{}" version="1" timestamp="2024-03-15T00:00:00Z">\n'.format(line[0])
             try:
                 members = json.loads(line[1])
