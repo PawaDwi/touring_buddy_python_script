@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 if 'PYCHARM_HOSTED' not in os.environ:
     from tqdm import tqdm
 
+CHUNK_SIZE = 8 * 1024 * 1024  # 8MB chunk size
 
 # Configure logging
 logging.basicConfig(filename='error.log', level=logging.ERROR)
@@ -115,53 +116,88 @@ def process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_se
         # Log any exception occurred during the process
         print(f"Error processing nodes data: {e}")
 
+def upload_large_object(s3_client, body, bucket, key):
+    # Initialize multipart upload
+    response = s3_client.create_multipart_upload(Bucket=bucket, Key=key)
+    upload_id = response['UploadId']
+    part_number = 1
+    parts = []
+
+    try:
+        # Upload parts
+        for offset in range(0, len(body), CHUNK_SIZE):
+            chunk = body[offset:offset + CHUNK_SIZE]
+            part = s3_client.upload_part(
+                Bucket=bucket,
+                Key=key,
+                PartNumber=part_number,
+                UploadId=upload_id,
+                Body=chunk
+            )
+            parts.append({'PartNumber': part_number, 'ETag': part['ETag']})
+            part_number += 1
+
+        # Complete multipart upload
+        s3_client.complete_multipart_upload(
+            Bucket=bucket,
+            Key=key,
+            UploadId=upload_id,
+            MultipartUpload={'Parts': parts}
+        )
+    except Exception as e:
+        # Abort multipart upload on failure
+        s3_client.abort_multipart_upload(Bucket=bucket, Key=key, UploadId=upload_id)
+        raise e
+
 def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key):
     try:
-        s3 =  boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
-        print(f"S3 INITIALIAZE {s3}")
-        way_response = s3.get_object(Bucket='touring-buddy', Key=sourceFileName)
-        way_content = way_response['Body'].iter_lines()
-        next(way_content)  # Skip the header line
+        s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
+        print(f"S3 INITIALIZED {s3}")
 
+        # Initialize OSM content string
         osm_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
         osm_content += '<osm version="0.6" generator="osmium/1.16.0">\n'
 
-        # Store lines in a list
-        way_lines = list(way_content)
+        # Stream OSM content directly from source file to destination file
+        with s3.get_object(Bucket='touring-buddy', Key=sourceFileName)['Body'] as source_file:
+            # Skip the header line
+            next(source_file)
 
-        # Process way CSV
-        total_iterations = len(way_lines)
-        for line_num, line in tqdm(enumerate(csv.reader((line.decode('utf-8') for line in way_lines))), total=total_iterations, desc="Processing ways", disable='PYCHARM_HOSTED' in os.environ):
-            print('processing ways:',line_num)
-            osm_content += '  <way id="{}" version="1" timestamp="2024-03-15T00:00:00Z">\n'.format(line[0])
-            nodes = line[1].strip('"{}').split(',')
-            for node in nodes:
-                osm_content += '    <nd ref="{}"/>\n'.format(node.strip())
-            try:
-                # Check if the third column contains valid JSON
-                if line[2]:
-                    tags = json.loads(line[2].replace('""', '"'))
-                    cleaned_tags = clean_tags(tags)
-                    for k, v in cleaned_tags.items():
-                        osm_content += '    <tag k="{}" v="{}"/>\n'.format(escape_xml(k), escape_xml(v))
-            except json.JSONDecodeError(e):
-                # Log error with line number and continue to the next line
-                continue
-            except Exception as e:
-                # Log other exceptions and continue to the next line
-                print(f"Error processing way at line {line_num + 1}: {e}")
-                continue
-            osm_content += '  </way>\n'
+            # Process each line in the source file
+            for line_num, line in tqdm(enumerate(csv.reader((line.decode('utf-8') for line in source_file))), desc="Processing ways"):
+                print('processing ways:', line_num)
+                osm_content += '  <way id="{}" version="1" timestamp="2024-03-15T00:00:00Z">\n'.format(line[0])
+                nodes = line[1].strip('"{}').split(',')
+                for node in nodes:
+                    osm_content += '    <nd ref="{}"/>\n'.format(node.strip())
+                try:
+                    # Check if the third column contains valid JSON
+                    if line[2]:
+                        tags = json.loads(line[2].replace('""', '"'))
+                        cleaned_tags = clean_tags(tags)
+                        for k, v in cleaned_tags.items():
+                            osm_content += '    <tag k="{}" v="{}"/>\n'.format(escape_xml(k), escape_xml(v))
+                except json.JSONDecodeError as e:
+                    # Log error with line number and continue to the next line
+                    print(f"JSON Decode Error processing way at line {line_num + 1}: {e}")
+                    continue
+                except Exception as e:
+                    # Log other exceptions and continue to the next line
+                    print(f"Error processing way at line {line_num + 1}: {e}")
+                    continue
+                osm_content += '  </way>\n'
+
         osm_content += '</osm>\n'
-        print(f"____________________PROCESSING_COMPLETED_______________________________")
-        print(f"TOTAL RECORDS :- {total_iterations}")
+        print("____________________PROCESSING_COMPLETED_______________________________")
         print(f"INITIATING UPLOAD OSM FILE TO S3 {destinationFileName}")
+
+        # Upload OSM content to S3 using multipart upload
         try:
-            s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
-        except:
-            print(f"ERROR UPLOADING")
-        print(f"DONE UPLOADEING {destinationFileName} TO S3")
-        # print(f"OSM CONTENT {osm_content.encode('utf-8')}")
+            upload_large_object(s3, osm_content.encode('utf-8'), 'touring-buddy', destinationFileName)
+            print(f"DONE UPLOADING {destinationFileName} TO S3")
+        except Exception as e:
+            print(f"ERROR UPLOADING: {e}")
+
     except Exception as e:
         print(f"Error processing ways: {e}")
 
