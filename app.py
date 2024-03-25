@@ -102,9 +102,12 @@ def process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_se
         osm_content += '<bounds minlat="{:.7f}" minlon="{:.7f}" maxlat="{:.7f}" maxlon="{:.7f}"/>\n'.format(min_lat, min_lon, max_lat, max_lon)
         osm_content += '</osm>\n'
         print(f"____________________PROCESSING_COMPLETED_______________________________")
-        print(f"TOTAL RECORDS :- {node_lines}")
+        print(f"TOTAL RECORDS :- {total_iterations}")
         print(f"INITIATING UPLOAD OSM FILE TO S3 {destinationFileName}")
-        s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
+        try:
+            s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
+        except e:
+            print(f"ERROR UPLOADING {e}")
         print(f"DONE UPLOADEING {destinationFileName} TO S3")
         print(f"OSM CONTENT {osm_content.encode('utf-8')}")
     except Exception as e:
@@ -150,11 +153,14 @@ def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secr
             osm_content += '  </way>\n'
         osm_content += '</osm>\n'
         print(f"____________________PROCESSING_COMPLETED_______________________________")
-        print(f"TOTAL RECORDS :- {way_lines}")
+        print(f"TOTAL RECORDS :- {total_iterations}")
         print(f"INITIATING UPLOAD OSM FILE TO S3 {destinationFileName}")
-        s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
+        try:
+            s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
+        except e:
+            print(f"ERROR UPLOADING {e}")
         print(f"DONE UPLOADEING {destinationFileName} TO S3")
-        print(f"OSM CONTENT {osm_content.encode('utf-8')}")
+        # print(f"OSM CONTENT {osm_content.encode('utf-8')}")
     except Exception as e:
         print(f"Error processing ways: {e}")
 
@@ -206,11 +212,14 @@ def process_relation(sourceFileName, destinationFileName, aws_access_key_id, aws
 
         osm_content += '</osm>\n'
         print(f"____________________PROCESSING_COMPLETED_______________________________")
-        print(f"TOTAL RECORDS :- {relation_lines}")
+        print(f"TOTAL RECORDS :- {total_iterations}")
         print(f"INITIATING UPLOAD OSM FILE TO S3 {destinationFileName}")
-        s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
+        try:
+            s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
+        except e:
+            print(f"ERROR UPLOADING {e}")
         print(f"DONE UPLOADEING {destinationFileName} TO S3")
-        print(f"OSM CONTENT {osm_content.encode('utf-8')}")
+        # print(f"OSM CONTENT {osm_content.encode('utf-8')}")
     except Exception as e:
         logging.error(f"Error processing relations: {e}")
 
@@ -222,13 +231,13 @@ def main(sourceFileName, destinationFileName):
     # Determine the type of file based on the file name
     if sourceFileName == 'india-node.csv':
         print(f"EXECUTING process_nodes FUNCTION ")
-        process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key)
+        process_nodes(sourceFileName= sourceFileName, destinationFileName=destinationFileName,aws_access_key_id= aws_access_key_id,aws_secret_access_key= aws_secret_access_key)
     elif sourceFileName == 'india-ways.csv':
         print(f"EXECUTING process_way FUNCTION ")
-        process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key)
+        process_way(sourceFileName=sourceFileName,destinationFileName= destinationFileName,aws_access_key_id= aws_access_key_id, aws_secret_access_key= aws_secret_access_key)
     elif sourceFileName == 'india-rels.csv':
         print(f"EXECUTING process_relation FUNCTION ")
-        process_relation(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key)
+        process_relation(sourceFileName= sourceFileName, destinationFileName= destinationFileName,aws_access_key_id=  aws_access_key_id, aws_secret_access_key= aws_secret_access_key)
     else:
         logging.error("Invalid source file type.")
 
@@ -237,5 +246,5 @@ if __name__ == "__main__":
     parser.add_argument("--source", dest="source_file_name", required=True, help="Source file name")
     parser.add_argument("--destination", dest="destination_file_name", required=True, help="Destination file name")
     args = parser.parse_args()
-    print("STARTING FILE PROCESSING")
+    print(f"STARTING FILE PROCESSING {args.source_file_name} {args.destination_file_name}")
     main(sourceFileName=args.source_file_name, destinationFileName=args.destination_file_name)
