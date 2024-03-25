@@ -196,11 +196,11 @@ def main(sourceFileName, destinationFileName):
     aws_secret_access_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
     
     # Determine the type of file based on the file name
-    if sourceFileName == 'north-node.csv':
+    if sourceFileName == 'india-node.csv':
         process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key)
-    elif sourceFileName == 'north-ways.csv':
+    elif sourceFileName == 'india-ways.csv':
         process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key)
-    elif sourceFileName == 'north-rels.csv':
+    elif sourceFileName == 'india-rels.csv':
         process_relation(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key)
     else:
         logging.error("Invalid source file type.")
