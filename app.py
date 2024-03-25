@@ -41,80 +41,7 @@ import json
 import boto3
 from tqdm import tqdm
 
-def process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key):
-    try:
-        # Initialize logging
-        logging.basicConfig(filename='error.log', level=logging.ERROR)
 
-        # Initialize S3 client
-        s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
-        print(f"S3 INITIALIAZE {s3}")
-
-        # Retrieve node data from S3
-        node_response = s3.get_object(Bucket='touring-buddy', Key=sourceFileName)
-        node_content = node_response['Body'].iter_lines()
-        next(node_content)  # Skip the header line
-
-        # Initialize XML content
-        osm_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
-        osm_content += '<osm version="0.6" generator="osmium/1.16.0">\n'
-
-        # Initialize bounds
-        min_lat = float('inf')
-        min_lon = float('inf')
-        max_lat = float('-inf')
-        max_lon = float('-inf')
-
-        # Convert generator to list to get total line count
-        node_lines = list(node_content)
-        total_iterations = len(node_lines)
-
-        # Process each line in the CSV
-        for line_num, line in tqdm(enumerate(csv.reader((line.decode('utf-8') for line in node_lines))), total=total_iterations, desc="Processing nodes", disable='PYCHARM_HOSTED' in os.environ):
-            print('processing nodes:',line_num)
-            try:
-                # Extract node information
-                node_id = line[0]
-                lat = float(line[1]) / 10**7
-                lon = float(line[2]) / 10**7
-                
-                # Update bounds
-                min_lat = min(min_lat, lat)
-                min_lon = min(min_lon, lon)
-                max_lat = max(max_lat, lat)
-                max_lon = max(max_lon, lon)
-                
-                # Process tags if available
-                if len(line) > 3 and line[3]:
-                    tags_str = re.sub(r'(?<!\\)""', '"', line[3].replace('""', '\\"'))# Replace double double-quotes with single double-quotes using replace
-                    tags_str = re.sub(r'(?<!\\)""', '"', tags_str)  # Further replace any remaining double double-quotes
-                    tags = json.loads(tags_str)  # Load the JSON string into a dictionary
-                    cleaned_tags = clean_tags(tags)
-                    osm_content += '  <node id="{}" version="1" timestamp="2024-03-15T00:00:00Z" lat="{:.7f}" lon="{:.7f}">\n'.format(node_id, lat, lon)
-                    for k, v in cleaned_tags.items():
-                        osm_content += '    <tag k="{}" v="{}"/>\n'.format(escape_xml(k), escape_xml(v))
-                    osm_content += '  </node>\n'
-                else:
-                    osm_content += '  <node id="{}" version="1" timestamp="2024-03-15T00:00:00Z" lat="{:.7f}" lon="{:.7f}"/>\n'.format(node_id, lat, lon)
-            except Exception as e:
-                # Log error with line number
-                logging.error(f"Error processing node at line {line_num + 1}: {e}")
-
-        # Add bounds to the XML content
-        osm_content += '<bounds minlat="{:.7f}" minlon="{:.7f}" maxlat="{:.7f}" maxlon="{:.7f}"/>\n'.format(min_lat, min_lon, max_lat, max_lon)
-        osm_content += '</osm>\n'
-        print(f"____________________PROCESSING_COMPLETED_______________________________")
-        print(f"TOTAL RECORDS :- {total_iterations}")
-        print(f"INITIATING UPLOAD OSM FILE TO S3 {destinationFileName}")
-        try:
-            s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
-        except:
-            print(f"ERROR UPLOADING")
-        print(f"DONE UPLOADEING {destinationFileName} TO S3")
-        print(f"OSM CONTENT {osm_content.encode('utf-8')}")
-    except Exception(e):
-        # Log any exception occurred during the process
-        print(f"Error processing nodes data: {e}")
 
 def upload_large_object(s3_client, body, bucket, key):
     # Initialize multipart upload
@@ -148,6 +75,73 @@ def upload_large_object(s3_client, body, bucket, key):
         # Abort multipart upload on failure
         s3_client.abort_multipart_upload(Bucket=bucket, Key=key, UploadId=upload_id)
         raise e
+    
+
+def process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key):
+    try:
+        # Initialize S3 client
+        s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
+        print(f"S3 INITIALIAZE {s3}")
+        # Initialize XML content
+        osm_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
+        osm_content += '<osm version="0.6" generator="osmium/1.16.0">\n'
+
+        # Initialize bounds
+        min_lat = float('inf')
+        min_lon = float('inf')
+        max_lat = float('-inf')
+        max_lon = float('-inf')
+        
+        with s3.get_object(Bucket='touring-buddy', Key=sourceFileName)['Body'] as source_file:
+            next(source_file)  # Skip the header line
+        # Process each line in the CSV
+            for line_num, line in tqdm(enumerate(csv.reader((line.decode('utf-8') for line in source_file))), desc="Processing nodes"):
+                print('processing nodes:',line_num)
+                try:
+                    # Extract node information
+                    node_id = line[0]
+                    lat = float(line[1]) / 10**7
+                    lon = float(line[2]) / 10**7
+
+                    # Update bounds
+                    min_lat = min(min_lat, lat)
+                    min_lon = min(min_lon, lon)
+                    max_lat = max(max_lat, lat)
+                    max_lon = max(max_lon, lon)
+
+                    # Process tags if available
+                    if len(line) > 3 and line[3]:
+                        tags_str = re.sub(r'(?<!\\)""', '"', line[3].replace('""', '\\"'))# Replace double double-quotes with single double-quotes using replace
+                        tags_str = re.sub(r'(?<!\\)""', '"', tags_str)  # Further replace any remaining double double-quotes
+                        tags = json.loads(tags_str)  # Load the JSON string into a dictionary
+                        cleaned_tags = clean_tags(tags)
+                        osm_content += '  <node id="{}" version="1" timestamp="2024-03-15T00:00:00Z" lat="{:.7f}" lon="{:.7f}">\n'.format(node_id, lat, lon)
+                        for k, v in cleaned_tags.items():
+                            osm_content += '    <tag k="{}" v="{}"/>\n'.format(escape_xml(k), escape_xml(v))
+                        osm_content += '  </node>\n'
+                    else:
+                        osm_content += '  <node id="{}" version="1" timestamp="2024-03-15T00:00:00Z" lat="{:.7f}" lon="{:.7f}"/>\n'.format(node_id, lat, lon)
+                except Exception as e:
+                    # Log error with line number
+                    logging.error(f"Error processing node at line {line_num + 1}: {e}")
+
+        # Add bounds to the XML content
+        osm_content += '<bounds minlat="{:.7f}" minlon="{:.7f}" maxlat="{:.7f}" maxlon="{:.7f}"/>\n'.format(min_lat, min_lon, max_lat, max_lon)
+        osm_content += '</osm>\n'
+        print("____________________PROCESSING_COMPLETED_______________________________")
+        print(f"INITIATING UPLOAD OSM FILE TO S3 {destinationFileName}")
+
+        # Upload OSM content to S3 using multipart upload
+        try:
+            upload_large_object(s3, osm_content.encode('utf-8'), 'touring-buddy', destinationFileName)
+            print(f"DONE UPLOADING {destinationFileName} TO S3")
+        except Exception as e:
+            print(f"ERROR UPLOADING: {e}")
+    except Exception(e):
+        # Log any exception occurred during the process
+        print(f"Error processing nodes data: {e}")
+
+
 
 def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key):
     try:
@@ -205,62 +199,61 @@ def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secr
 def process_relation(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key):
     try:
         s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
-        print(f"S3 INITIALIAZE {s3}")
-        relation_response = s3.get_object(Bucket='touring-buddy', Key=sourceFileName)
-        relation_content = relation_response['Body'].iter_lines()
-        next(relation_content)  # Skip the header line
-        
+        print(f"S3 INITIALIZED {s3}")
+
+        # Initialize OSM content string
         osm_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
         osm_content += '<osm version="0.6" generator="osmium/1.16.0">\n'
 
-        # Store lines in a list
-        relation_lines = list(relation_content)
+        # Stream OSM content directly from source file to destination file
+        with s3.get_object(Bucket='touring-buddy', Key=sourceFileName)['Body'] as source_file:
+            # Skip the header line
+            next(source_file)
 
-        # Process relation CSV
-        total_iterations = len(relation_lines)
-        for line_num, line in tqdm(enumerate(csv.reader((line.decode('utf-8') for line in relation_lines))), total=total_iterations, desc="Processing relation", disable='PYCHARM_HOSTED' in os.environ):
-            print('processing relations:',line_num)
-            osm_content += '  <relation id="{}" version="1" timestamp="2024-03-15T00:00:00Z">\n'.format(line[0])
-            try:
-                members = json.loads(line[1])
-                for member in members:
-                    member_type = member["type"].lower()
-                    if member_type == 'w':
-                        member_type = 'way'
-                    elif member_type == 'n':
-                        member_type = 'node'
-                    elif member_type == 'r':
-                        member_type = 'relation'
-                    osm_content += '    <member type="{}" ref="{}" role="{}"/>\n'.format(member_type, member["ref"], escape_xml(member["role"]))
-            except Exception as e:
-                logging.error(f"Error processing relation members: {e}")
-                pass
-            
-            try:
-                tags = json.loads(line[2])
-                cleaned_tags = clean_tags(tags)
-                for k, v in cleaned_tags.items():
-                    osm_content += '    <tag k="{}" v="{}"/>\n'.format(escape_xml(k), escape_xml(v))
-            except Exception as e:
-                print(f"Error processing relation tags: {e}")
-                pass
-            
-            osm_content += '  </relation>\n'
+            # Process each line in the source file
+            for line_num, line in tqdm(enumerate(csv.reader((line.decode('utf-8') for line in source_file))), total=total_iterations, desc="Processing relation"):
+                print('processing relations:', line_num)
+                osm_content += '  <relation id="{}" version="1" timestamp="2024-03-15T00:00:00Z">\n'.format(line[0])
+
+                try:
+                    members = json.loads(line[1])
+                    for member in members:
+                        member_type = member["type"].lower()
+                        if member_type == 'w':
+                            member_type = 'way'
+                        elif member_type == 'n':
+                            member_type = 'node'
+                        elif member_type == 'r':
+                            member_type = 'relation'
+                        osm_content += '    <member type="{}" ref="{}" role="{}"/>\n'.format(member_type, member["ref"], escape_xml(member["role"]))
+                except Exception as e:
+                    logging.error(f"Error processing relation members at line {line_num + 1}: {e}")
+                    continue
+
+                try:
+                    tags = json.loads(line[2])
+                    cleaned_tags = clean_tags(tags)
+                    for k, v in cleaned_tags.items():
+                        osm_content += '    <tag k="{}" v="{}"/>\n'.format(escape_xml(k), escape_xml(v))
+                except Exception as e:
+                    logging.error(f"Error processing relation tags at line {line_num + 1}: {e}")
+                    continue
+
+                osm_content += '  </relation>\n'
 
         osm_content += '</osm>\n'
         print(f"____________________PROCESSING_COMPLETED_______________________________")
-        print(f"TOTAL RECORDS :- {total_iterations}")
         print(f"INITIATING UPLOAD OSM FILE TO S3 {destinationFileName}")
+
+        # Upload OSM content to S3 using multipart upload
         try:
-            s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
-        except:
-            print(f"ERROR UPLOADING")
-        print(f"DONE UPLOADEING {destinationFileName} TO S3")
-        # print(f"OSM CONTENT {osm_content.encode('utf-8')}")
-    except Exception(e):
+            upload_large_object(s3, osm_content.encode('utf-8'), 'touring-buddy', destinationFileName)
+            print(f"DONE UPLOADING {destinationFileName} TO S3")
+        except Exception as e:
+            print(f"ERROR UPLOADING: {e}")
+
+    except Exception as e:
         logging.error(f"Error processing relations: {e}")
-
-
 
 def main(sourceFileName, destinationFileName):
     load_dotenv()
