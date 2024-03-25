@@ -261,7 +261,7 @@ def main(sourceFileName, destinationFileName):
     aws_secret_access_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
     print(f"LOADED ENV SUCCESSFULLY")
     # Determine the type of file based on the file name
-    if sourceFileName == 'india-nodes_batch1.csv'|sourceFileName == 'india-nodes_batch2.csv':
+    if sourceFileName == 'india-nodes_batch1.csv' or sourceFileName == 'india-nodes_batch2.csv':
         print(f"EXECUTING process_nodes FUNCTION ")
         process_nodes(sourceFileName= sourceFileName, destinationFileName=destinationFileName,aws_access_key_id= aws_access_key_id,aws_secret_access_key= aws_secret_access_key)
     elif sourceFileName == 'india-ways.csv':
