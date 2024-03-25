@@ -1,4 +1,5 @@
 import csv
+from io import BytesIO
 import json
 import re
 from tqdm import tqdm 
@@ -105,18 +106,18 @@ def process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_se
         print(f"TOTAL RECORDS :- {total_iterations}")
         print(f"INITIATING UPLOAD OSM FILE TO S3 {destinationFileName}")
         try:
-            s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
-        except e:
-            print(f"ERROR UPLOADING {e}")
+            upload_large_content_to_s3(bucket_name="touring-buddy",content=osm_content,object_name=destinationFileName)
+        except:
+            print(f"ERROR UPLOADING")
         print(f"DONE UPLOADEING {destinationFileName} TO S3")
         print(f"OSM CONTENT {osm_content.encode('utf-8')}")
-    except Exception as e:
+    except Exception(e):
         # Log any exception occurred during the process
         print(f"Error processing nodes data: {e}")
 
 def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key):
     try:
-        s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
+        s3 =  boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
         print(f"S3 INITIALIAZE {s3}")
         way_response = s3.get_object(Bucket='touring-buddy', Key=sourceFileName)
         way_content = way_response['Body'].iter_lines()
@@ -143,7 +144,7 @@ def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secr
                     cleaned_tags = clean_tags(tags)
                     for k, v in cleaned_tags.items():
                         osm_content += '    <tag k="{}" v="{}"/>\n'.format(escape_xml(k), escape_xml(v))
-            except json.JSONDecodeError as e:
+            except json.JSONDecodeError(e):
                 # Log error with line number and continue to the next line
                 continue
             except Exception as e:
@@ -156,9 +157,9 @@ def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secr
         print(f"TOTAL RECORDS :- {total_iterations}")
         print(f"INITIATING UPLOAD OSM FILE TO S3 {destinationFileName}")
         try:
-            s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
-        except e:
-            print(f"ERROR UPLOADING {e}")
+           upload_large_content_to_s3(bucket_name="touring-buddy",content=osm_content,object_name=destinationFileName)
+        except:
+            print(f"ERROR UPLOADING")
         print(f"DONE UPLOADEING {destinationFileName} TO S3")
         # print(f"OSM CONTENT {osm_content.encode('utf-8')}")
     except Exception as e:
@@ -215,13 +216,81 @@ def process_relation(sourceFileName, destinationFileName, aws_access_key_id, aws
         print(f"TOTAL RECORDS :- {total_iterations}")
         print(f"INITIATING UPLOAD OSM FILE TO S3 {destinationFileName}")
         try:
-            s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
-        except e:
-            print(f"ERROR UPLOADING {e}")
+            upload_large_content_to_s3(bucket_name="touring-buddy",content=osm_content,object_name=destinationFileName)
+            # s3.put_object(Body=osm_content.encode('utf-8'), Bucket='touring-buddy', Key=destinationFileName)
+        except:
+            print(f"ERROR UPLOADING")
         print(f"DONE UPLOADEING {destinationFileName} TO S3")
         # print(f"OSM CONTENT {osm_content.encode('utf-8')}")
-    except Exception as e:
+    except Exception(e):
         logging.error(f"Error processing relations: {e}")
+
+
+
+def upload_large_content_to_s3(content, bucket_name, object_name):
+    """
+    Uploads large content to Amazon S3.
+
+    :param content: Content to upload.
+    :param bucket_name: Name of the S3 bucket.
+    :param object_name: S3 object name.
+    :return: True if content was uploaded successfully, else False.
+    """
+    load_dotenv()
+    aws_access_key_id = os.environ.get('AWS_ACCESS_KEY_ID')
+    aws_secret_access_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
+    
+    # Initialize a session using AWS credentials
+    session = boto3.Session(
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key
+    )
+    
+    # Create S3 client
+    s3_client = session.client('s3')
+
+    # Convert content to bytes
+    content_bytes = content.encode('utf-8')
+    content_stream = BytesIO(content_bytes)
+
+    # Perform multipart upload to handle large content
+    multipart_upload = s3_client.create_multipart_upload(
+        Bucket=bucket_name,
+        Key=object_name
+    )
+
+    # Start uploading parts
+    part_number = 1
+    parts = []
+
+    while True:
+        # Read part_size bytes from the content
+        part_data = content_stream.read(5 * 1024 * 1024)  # 5 MB chunk size
+        if not part_data:
+            break
+
+        # Upload the part
+        response = s3_client.upload_part(
+            Bucket=bucket_name,
+            Key=object_name,
+            PartNumber=part_number,
+            UploadId=multipart_upload['UploadId'],
+            Body=part_data
+        )
+
+        # Append part number and ETag for later completion
+        parts.append({'PartNumber': part_number, 'ETag': response['ETag']})
+        part_number += 1
+
+    # Complete the multipart upload
+    s3_client.complete_multipart_upload(
+        Bucket=bucket_name,
+        Key=object_name,
+        UploadId=multipart_upload['UploadId'],
+        MultipartUpload={'Parts': parts}
+    )
+
+    return True
 
 def main(sourceFileName, destinationFileName):
     load_dotenv()
