@@ -190,7 +190,7 @@ def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secr
                 if tags_present:
                     osm_content += '  </way>\n'  # Close the way tag after processing tags
                 else:
-                    osm_content += '</way>\n'  # Close the way tag if no tags are present
+                    osm_content +=  '  </way>\n'  # Close the way tag if no tags are present
 
         osm_content += '</osm>\n'
         print("____________________PROCESSING_COMPLETED_______________________________")
