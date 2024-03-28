@@ -159,13 +159,10 @@ def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secr
             # Process each line in the source file
             for line_num, line in tqdm(enumerate(csv.reader((line.decode('utf-8') for line in source_file))), desc="Processing ways"):
                 print('processing ways:', line_num)
-                osm_content += '  <way id="{}" version="1" timestamp="2024-03-15T00:00:00Z">\n'.format(line[0])
+                osm_content += '    <way id="{}" version="1" timestamp="2024-03-15T00:00:00Z">\n'.format(line[0])
                 nodes = line[1].strip('"{}').split(',')
                 for node in nodes:
-                    osm_content += '    <nd ref="{}"/>\n'.format(node.strip())
-                
-                tags_present = False
-                
+                    osm_content += '        <nd ref="{}"/>\n'.format(node.strip())
                 try:
                     # Check if the third column contains valid JSON
                     if line[2]:
@@ -176,8 +173,9 @@ def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secr
                                 v = str(v)
                             v = v.replace("\n", "&#10;")
                             v = saxutils.escape(v)  # Escape special characters
-                            osm_content += '    <tag k="{}" v="{}"/>\n'.format(escape_xml(k), escape_xml(v))
+                            osm_content += '        <tag k="{}" v="{}"/>\n'.format(escape_xml(k), escape_xml(v))
                             tags_present = True
+                    osm_content += '    </way>\n'  # Close the way tag after processing tags
                 except json.JSONDecodeError as e:
                     # Log error with line number and continue to the next line
                     print(f"JSON Decode Error processing way at line {line_num + 1}: {e}")
@@ -187,11 +185,6 @@ def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secr
                     print(f"Error processing way at line {line_num + 1}: {e}")
                     continue
                 
-                if tags_present:
-                    osm_content += '  </way>\n'  # Close the way tag after processing tags
-                else:
-                    osm_content +=  '  </way>\n'  # Close the way tag if no tags are present
-
         osm_content += '</osm>\n'
         print("____________________PROCESSING_COMPLETED_______________________________")
         print(f"INITIATING UPLOAD OSM FILE TO S3 {destinationFileName}")
