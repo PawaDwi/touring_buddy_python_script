@@ -2,6 +2,7 @@ import csv
 from io import BytesIO
 import json
 import re
+from xml.sax import saxutils
 from tqdm import tqdm 
 import html
 import os
@@ -141,8 +142,6 @@ def process_nodes(sourceFileName, destinationFileName, aws_access_key_id, aws_se
         # Log any exception occurred during the process
         print(f"Error processing nodes data: {e}")
 
-
-
 def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secret_access_key):
     try:
         s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
@@ -164,13 +163,21 @@ def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secr
                 nodes = line[1].strip('"{}').split(',')
                 for node in nodes:
                     osm_content += '    <nd ref="{}"/>\n'.format(node.strip())
+                
+                tags_present = False
+                
                 try:
                     # Check if the third column contains valid JSON
                     if line[2]:
                         tags = json.loads(line[2].replace('""', '"'))
                         cleaned_tags = clean_tags(tags)
                         for k, v in cleaned_tags.items():
+                            if isinstance(v, int):
+                                v = str(v)
+                            v = v.replace("\n", "&#10;")
+                            v = saxutils.escape(v)  # Escape special characters
                             osm_content += '    <tag k="{}" v="{}"/>\n'.format(escape_xml(k), escape_xml(v))
+                            tags_present = True
                 except json.JSONDecodeError as e:
                     # Log error with line number and continue to the next line
                     print(f"JSON Decode Error processing way at line {line_num + 1}: {e}")
@@ -179,7 +186,11 @@ def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secr
                     # Log other exceptions and continue to the next line
                     print(f"Error processing way at line {line_num + 1}: {e}")
                     continue
-                osm_content += '  </way>\n'
+                
+                if tags_present:
+                    osm_content += '  </way>\n'  # Close the way tag after processing tags
+                else:
+                    osm_content += '</way>\n'  # Close the way tag if no tags are present
 
         osm_content += '</osm>\n'
         print("____________________PROCESSING_COMPLETED_______________________________")
@@ -234,12 +245,16 @@ def process_relation(sourceFileName, destinationFileName, aws_access_key_id, aws
                     tags = json.loads(line[2])
                     cleaned_tags = clean_tags(tags)
                     for k, v in cleaned_tags.items():
+                        if isinstance(v, int):
+                            v = str(v)
+                        v = v.replace("\n", "&#10;")
+                        v = saxutils.escape(v)  # Escape special characters
                         osm_content += '    <tag k="{}" v="{}"/>\n'.format(escape_xml(k), escape_xml(v))
                 except Exception as e:
                     logging.error(f"Error processing relation tags at line {line_num + 1}: {e}")
-                    continue
+                    # Continue processing even if tags fail
 
-                osm_content += '  </relation>\n'
+                osm_content += '  </relation>\n'  # Close the relation tag after processing
 
         osm_content += '</osm>\n'
         print(f"____________________PROCESSING_COMPLETED_______________________________")
@@ -254,6 +269,8 @@ def process_relation(sourceFileName, destinationFileName, aws_access_key_id, aws
 
     except Exception as e:
         logging.error(f"Error processing relations: {e}")
+
+
 
 def main(sourceFileName, destinationFileName):
     load_dotenv()
