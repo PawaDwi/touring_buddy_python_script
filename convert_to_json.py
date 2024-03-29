@@ -1,5 +1,6 @@
 import argparse
 import csv
+import datetime
 import json
 import os
 import re
@@ -34,17 +35,17 @@ def csv_to_osm_xml(row):
         tags = tag_json
 
     # Construct XML
-    way_element = ET.Element("way", attrib={"id": str(way_id)})
+    timestamp_utc = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    way_element = ET.Element("way", attrib={"id": str(way_id), "version": "1", "timestamp": timestamp_utc})
     for node_id in node_ids:
         node_element = ET.SubElement(way_element, "nd", attrib={"ref": str(node_id)})
     for key, value in tags.items():
         tag_element = ET.SubElement(way_element, "tag", attrib={"k": key, "v": value})
 
-    xml_string = ET.tostring(way_element, encoding='utf8', method='xml').decode()
-    print(f"\n\n{xml_string}\n\n")
+    xml_string = ET.tostring(way_element).decode()
     return xml_string
 
-def write_xml_to_s3(xml_data, bucket_name, file_key):
+def write_xml_to_s3(osm_xml_data, bucket_name, file_key):
     load_dotenv()
     aws_access_key_id = os.environ.get('AWS_ACCESS_KEY_ID')
     aws_secret_access_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
@@ -53,7 +54,7 @@ def write_xml_to_s3(xml_data, bucket_name, file_key):
         return
 
     s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
-    upload_large_object(s3, xml_data.encode('utf-8'), bucket_name, file_key)
+    upload_large_object(s3_client=s3, body=osm_xml_data.encode('utf-8'), bucket= bucket_name, key= file_key)
 
 def convert_csv_to_osm_xml_and_write_to_s3(bucket_name, csv_key, xml_key):
     load_dotenv()
@@ -71,12 +72,14 @@ def convert_csv_to_osm_xml_and_write_to_s3(bucket_name, csv_key, xml_key):
             osm_xml_data = '<?xml version="1.0" encoding="UTF-8"?>\n<osm version="0.6" generator="osmium/1.16.0">\n'
             for line_num, row in tqdm(enumerate(csv.reader((line.decode('utf-8') for line in source_file))), desc="Processing Ways"):
                 xml = csv_to_osm_xml(row=row)
+                print(f"\n\n{xml}\n\n")
                 osm_xml_data += xml + '\n'
             osm_xml_data += '</osm>'
         write_xml_to_s3(osm_xml_data, bucket_name, xml_key)
     except Exception as e:
         print(f"LINE NUMBER : {line_num}", row)
         logger.error(f"Error processing CSV file: {e}")
+
 
 def upload_large_object(s3_client, body, bucket, key):
     # Initialize multipart upload
@@ -109,8 +112,8 @@ def upload_large_object(s3_client, body, bucket, key):
     except Exception as e:
         # Abort multipart upload on failure
         s3_client.abort_multipart_upload(Bucket=bucket, Key=key, UploadId=upload_id)
-        print(f"Error uploading object to S3: {e}")
         raise e
+    
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Script description")
