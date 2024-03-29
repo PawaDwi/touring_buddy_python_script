@@ -54,8 +54,21 @@ def write_xml_to_s3(osm_xml_data, bucket_name, file_key):
         return
 
     s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
-    upload_large_object(s3_client=s3, body=osm_xml_data.encode('utf-8'), bucket= bucket_name, key= file_key)
+    write_osm_to_local(osm_xml_data=osm_xml_data)
+    # upload_large_object(s3_client=s3, body=osm_xml_data.encode('utf-8'), bucket= bucket_name, key= file_key)
 
+def write_osm_to_local(osm_xml_data):
+    try:
+        file_name = "ways_output.osm"
+        with open(file_name, "w") as file:
+            file.write(osm_xml_data)
+        print(f"OSM data has been written to {file_name} in the current directory.")
+    except Exception as e:
+        print(f"Error occurred while writing OSM data to file: {e}")
+
+    # Print current directory
+    print(f"Current directory: {os.getcwd()}")
+    
 def convert_csv_to_osm_xml_and_write_to_s3(bucket_name, csv_key, xml_key):
     load_dotenv()
     aws_access_key_id = os.environ.get('AWS_ACCESS_KEY_ID')
@@ -74,6 +87,8 @@ def convert_csv_to_osm_xml_and_write_to_s3(bucket_name, csv_key, xml_key):
                 xml = csv_to_osm_xml(row=row)
                 print(f"\n\n{xml}\n\n")
                 osm_xml_data += xml + '\n'
+                if(line_num==100):
+                    break
             osm_xml_data += '</osm>'
         write_xml_to_s3(osm_xml_data, bucket_name, xml_key)
     except Exception as e:
@@ -110,6 +125,7 @@ def upload_large_object(s3_client, body, bucket, key):
             MultipartUpload={'Parts': parts}
         )
     except Exception as e:
+        print(e)
         # Abort multipart upload on failure
         s3_client.abort_multipart_upload(Bucket=bucket, Key=key, UploadId=upload_id)
         raise e

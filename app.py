@@ -165,17 +165,17 @@ def process_way(sourceFileName, destinationFileName, aws_access_key_id, aws_secr
                     osm_content += '        <nd ref="{}"/>\n'.format(node.strip())
                 try:
                     # Check if the third column contains valid JSON
-                    if line[2]:
-                        tags = json.loads(line[2].replace('""', '"'))
-                        cleaned_tags = clean_tags(tags)
-                        for k, v in cleaned_tags.items():
+                    tags_str = line[2].strip()
+                    if tags_str and tags_str != '':
+                        tag_json = json.loads(tags_str)
+                        for k, v in tag_json.items():
                             if isinstance(v, int):
                                 v = str(v)
                             v = v.replace("\n", "&#10;")
-                            v = saxutils.escape(v)  # Escape special characters
+                            # v = saxutils.escape(v)  # Escape special characters
                             osm_content += '        <tag k="{}" v="{}"/>\n'.format(escape_xml(k), escape_xml(v))
-                            tags_present = True
                     osm_content += '    </way>\n'  # Close the way tag after processing tags
+                    print(f"----{osm_content}-----")
                 except json.JSONDecodeError as e:
                     # Log error with line number and continue to the next line
                     print(f"JSON Decode Error processing way at line {line_num + 1}: {e}")
